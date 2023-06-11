@@ -1,0 +1,65 @@
+name: Build and Deploy to EKS
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: far-test
+  CONTAINER_NAME: app
+  ENVIRONMENT: prod
+  EKS_CLUSTER: far-eks-cluster
+  EKS_NAMESPACE: test-app
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Git Short SHA
+      uses: benjlevesque/short-sha@v2.2
+      id: short-sha
+      with:
+        length: 5
+
+    - name: Build and push Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ env.ENVIRONMENT }}-${{ steps.short-sha.outputs.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Configure kubectl
+      run: |
+        aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+        kubectl config use-context arn:aws:eks:${{ env.AWS_REGION }}:${{ secrets.AWS_ACCOUNT }}:cluster/${{ env.EKS_CLUSTER }}
+
+    - name: Deploy to EKS
+      run: |
+        kubectl apply -f ./deployment/manifest/
+
+    - name: Display Ingress Address
+      run: |
+        echo "Waiting for ALB to be ready..."
+        sleep 30
+        kubectl get ingress graphite-ingress -n ${{ env.EKS_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
