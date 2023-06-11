@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: test-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      containers:
+      - name: app
+        image: 199007876401.dkr.ecr.ap-southeast-1.amazonaws.com/far-test:latest
+        env:
+        - name: METRICS_BACKEND_HOST
+          value: "graphite"
+        - name: METRICS_BACKEND_PORT
+          value: "8125"

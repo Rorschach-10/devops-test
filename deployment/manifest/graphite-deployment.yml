@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphite
+  namespace: test-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: graphite
+  template:
+    metadata:
+      labels:
+        app: graphite
+    spec:
+      volumes:
+        - name: graphite-storage
+          persistentVolumeClaim:
+            claimName: graphite-pvc
+      containers:
+      - name: graphite
+        image: graphiteapp/graphite-statsd:1.1.10-4
+        volumeMounts:
+          - mountPath: /opt/graphite/storage
+            name: graphite-storage
+        env:
+        - name: COLLECTD
+          value: "1"
+        - name: GRAPHITE_TIME_ZONE
+          value: "Asia/Bangkok"
+        - name: GRAPHITE_DEBUG
+          value: "1"
+        ports:
+        - name: ui
+          containerPort: 80
+        - name: carbon-rcvr
+          containerPort: 2003
+        - name: carbon-aggr
+          containerPort: 2023
+        - name: statsd
+          containerPort: 8125
+        - name: statsd-admin
+          containerPort: 8126
